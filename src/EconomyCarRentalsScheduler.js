@@ -1,4 +1,8 @@
 /**
+ * @Version 2.6
+ * @Date 28/07/2017
+ * @Changelog 2 retries for BQ selector
+ 
  * @Version 2.5
  * @Date 17/07/2017
  * @Changelog fixed ttKeyword with 0 extraBonus
@@ -71,7 +75,7 @@
 
 function main() {
     BD = {};
-    BD.VERSION = "2.5";
+    BD.VERSION = "2.6";
     BD.ACC = {};
     BD.CAMP = {};
     BD.ADGR = {};
@@ -840,6 +844,7 @@ BigQueryKeywords = function (projectId, tableId, accountId, datasetId, tableSche
      */
     this.load = function () {
         var projectId = this.core.getProjectId();
+        var attempts = 2;
         var queryRequest = BigQuery.newQueryRequest();
         var query = "SELECT a.adgroup_id, a.keyword_id, a.parameter";
         query += " FROM [" + projectId + ":" + this.core.getDatasetId() + "." + this.core.getTableId() + "] a INNER JOIN (";
@@ -849,13 +854,31 @@ BigQueryKeywords = function (projectId, tableId, accountId, datasetId, tableSche
         query += ") b ON a.adgroup_id = b.adgroup_id AND a.keyword_id = b.keyword_id AND a.timestamp = b.timestamp";
         var queryRows = this.core.query(query);
         this.BigQueryData = {};
-        for (var i = 0; i < queryRows.length; i++) {
-            var row = queryRows[i];
-            var adGroupId = parseInt(row.f[0].v);
-            var keywordId = parseInt(row.f[1].v);
-            var key = adGroupId.toString() + "#" + keywordId.toString();
-            this.BigQueryData[key] = row.f[2].v;
+        if (queryRows.length > 0) {
+            for (var i = 0; i < queryRows.length; i++) {
+                var row = queryRows[i];
+                var adGroupId = parseInt(row.f[0].v);
+                var keywordId = parseInt(row.f[1].v);
+                var key = adGroupId.toString() + "#" + keywordId.toString();
+                this.BigQueryData[key] = row.f[2].v;
+            }
+        } else {
+            while (attempts > 0) {
+                Logger.log("Retrying. Attempts remaining :" + attempts);
+                queryRows = this.core.query(query);
+                if (queryRows.length > 0) {
+                    for (var i = 0; i < queryRows.length; i++) {
+                        var row = queryRows[i];
+                        var adGroupId = parseInt(row.f[0].v);
+                        var keywordId = parseInt(row.f[1].v);
+                        var key = adGroupId.toString() + "#" + keywordId.toString();
+                        this.BigQueryData[key] = row.f[2].v;
+                    }
+                }
+                attempts = attempts - 1;
+            }
         }
+
     };
 
     /**
@@ -864,6 +887,7 @@ BigQueryKeywords = function (projectId, tableId, accountId, datasetId, tableSche
      */
     this.loadWithFilters = function (expression) {
         var projectId = this.core.getProjectId();
+        var attempts = 2;
         var queryRequest = BigQuery.newQueryRequest();
         var query = "SELECT a.adgroup_id, a.keyword_id, a.parameter";
         query += " FROM [" + projectId + ":" + this.core.getDatasetId() + "." + this.core.getTableId() + "] a INNER JOIN (";
@@ -874,12 +898,29 @@ BigQueryKeywords = function (projectId, tableId, accountId, datasetId, tableSche
         query += " WHERE " + expression.toSQL();
         var queryRows = this.core.query(query);
         this.BigQueryData = {};
-        for (var i = 0; i < queryRows.length; i++) {
-            var row = queryRows[i];
-            var adGroupId = parseInt(row.f[0].v);
-            var keywordId = parseInt(row.f[1].v);
-            var key = adGroupId.toString() + "#" + keywordId.toString();
-            this.BigQueryData[key] = row.f[2].v;
+        if (queryRows.length > 0) {
+            for (var i = 0; i < queryRows.length; i++) {
+                var row = queryRows[i];
+                var adGroupId = parseInt(row.f[0].v);
+                var keywordId = parseInt(row.f[1].v);
+                var key = adGroupId.toString() + "#" + keywordId.toString();
+                this.BigQueryData[key] = row.f[2].v;
+            }
+        } else {
+            while (attempts > 0) {
+                Logger.log("Retrying. Attempts remaining :" + attempts);
+                queryRows = this.core.query(query);
+                if (queryRows.length > 0) {
+                    for (var i = 0; i < queryRows.length; i++) {
+                        var row = queryRows[i];
+                        var adGroupId = parseInt(row.f[0].v);
+                        var keywordId = parseInt(row.f[1].v);
+                        var key = adGroupId.toString() + "#" + keywordId.toString();
+                        this.BigQueryData[key] = row.f[2].v;
+                    }
+                }
+                attempts = attempts - 1;
+            }
         }
     };
 
