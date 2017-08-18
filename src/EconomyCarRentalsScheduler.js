@@ -1,4 +1,9 @@
 /**
+ * @Version 2.6.2
+ * @Author Argiris
+ * @Date 18/08/2017
+ * @Changelog SQR returns explanatory errors
+ * 
  * @Version 2.6.1
  * @Date 28/07/2017
  * @Author Argiris
@@ -80,7 +85,7 @@
 
 function main() {
     BD = {};
-    BD.VERSION = "2.6.1";
+    BD.VERSION = "2.6.2";
     BD.ACC = {};
     BD.CAMP = {};
     BD.ADGR = {};
@@ -3091,7 +3096,7 @@ function SqrHandler() {
                 MailApp.sendEmail({
                     to: "yorgos@economycarrentals.com",
                     cc: "akaintarisecr@gmail.com",
-                    name: "CarFlexi SQR Script Services",
+                    name: "ECR SQR Script Services",
                     subject: "AdGroup Negative Keywords not Inserted in " + cid,
                     htmlBody: dumpMessage
                 });
@@ -3149,7 +3154,7 @@ function SqrHandler() {
                 MailApp.sendEmail({
                     to: "yorgos@economycarrentals.com",
                     cc: "akaintarisecr@gmail.com",
-                    name: "CarFlexi SQR Script Services",
+                    name: "ECR SQR Script Services",
                     subject: "Campaign Negative Keywords not Inserted in " + cid,
                     htmlBody: dumpMessage
                 });
@@ -3175,6 +3180,7 @@ function SqrHandler() {
         var cid = AdWordsApp.currentAccount().getCustomerId().replace(/\-/g, "");
         var keywords = [];
         var dump = [];
+        var matchtypeMap = {"B": "BROAD", "E": "EXACT", "P": "PHRASE"};
         var stmt = conn.prepareStatement('CALL `black-hole`.select_new_positive_kw_by_acc(?)');
         stmt.setString(1, cid);
         var results = stmt.executeQuery();
@@ -3189,30 +3195,58 @@ function SqrHandler() {
         if (keywords.length > 0) {
             var count = 0;
             for (var i in keywords) {
-                var keywordIterator = AdWordsApp
+                var keywordCheck = AdWordsApp
                         .keywords()
-                        .withCondition("AdGroupName CONTAINS '" + keywords[i]["adgr_name"] + "'")
-                        .withCondition("Text = '" + keywords[i]["keyword"].replace("[", "").replace("]", "").replace("\"", "").replace("\"", "") + "'")
+                        .withCondition("Text = '" + keywords[i]["searchterm"] + "'")
+                        .withCondition("KeywordMatchType = " + matchtypeMap[keywords[i]["matchtype"]])
                         .get();
-                if (keywordIterator.totalNumEntities() >= 1) {
+                if (keywordCheck.totalNumEntities() == 0) {
                     var adGroupIterator = AdWordsApp
                             .adGroups()
                             .withCondition("AdGroupName CONTAINS '" + keywords[i]["adgr_name"] + "'")
                             .get();
                     if (adGroupIterator.totalNumEntities() == 1) {
-                        var parentUrls = keywordIterator.next().urls();
-                        adGroupIterator.next().newKeywordBuilder()
-                                .withText(formatKeywordByMatchtype(keywords[i]["searchterm"], keywords[i]["matchtype"]))
-                                .withCpc(keywords[i]["cpc"])
-                                .withCustomParameters(parentUrls.getCustomParameters())
-                                .withFinalUrl(parentUrls.getFinalUrl().replace(/{ignore}.*/, "{ignore}&keep=" + keywords[i]["keep_flag"]))
-                                .build();
-                        count++;
+                        var adGroup = adGroupIterator.next();
+                        var keywordIterator = adGroup
+                                .keywords()
+                                .withCondition("Text = '" + keywords[i]["keyword"].replace("[", "").replace("]", "").replace("\"", "").replace("\"", "") + "'")
+                                .get();
+                        if (keywordIterator.totalNumEntities() >= 1) {
+                            var parentUrls = keywordIterator.next().urls();
+                            adGroup.newKeywordBuilder()
+                                    .withText(formatKeywordByMatchtype(keywords[i]["searchterm"], keywords[i]["matchtype"]))
+                                    .withCpc(keywords[i]["cpc"])
+                                    .withCustomParameters(parentUrls.getCustomParameters())
+                                    .withFinalUrl(parentUrls.getFinalUrl().replace(/{ignore}.*/, "{ignore}&keep=" + keywords[i]["keep_flag"]))
+                                    .build();
+                            count++;
+                        } else if (keywordIterator.totalNumEntities() == 0) {
+                            dump.push([cid, keywords[i]["adgr_name"], keywords[i]["keyword"], keywords[i]["searchterm"], keywords[i]["matchtype"], keywords[i]["cpc"], keywords[i]["keep_flag"], "Original Keyword does not Exist"]);
+                        } else {
+                            var msg = "";
+                            while (keywordIterator.hasNext()) {
+                                var item = keywordIterator.next();
+                                msg += item.getAdGroup().getId() + "#" + item.getId() + ";";
+                            }
+                            dump.push([cid, keywords[i]["adgr_name"], keywords[i]["keyword"], keywords[i]["searchterm"], keywords[i]["matchtype"], keywords[i]["cpc"], keywords[i]["keep_flag"], "More than one Original Keywords: " + msg]);
+                        }
+                    } else if (adGroupIterator.totalNumEntities() == 0) {
+                        dump.push([cid, keywords[i]["adgr_name"], keywords[i]["keyword"], keywords[i]["searchterm"], keywords[i]["matchtype"], keywords[i]["cpc"], keywords[i]["keep_flag"], "AdGroup does not Exist"]);
                     } else {
-                        dump.push([cid, keywords[i]["adgr_name"], keywords[i]["keyword"], keywords[i]["searchterm"], keywords[i]["matchtype"], keywords[i]["cpc"], keywords[i]["keep_flag"], "Unresolved AdGroup"]);
+                        var msg = "";
+                        while (adGroupIterator.hasNext()) {
+                            var item = adGroupIterator.next();
+                            msg += item.getId() + ";";
+                        }
+                        dump.push([cid, keywords[i]["adgr_name"], keywords[i]["keyword"], keywords[i]["searchterm"], keywords[i]["matchtype"], keywords[i]["cpc"], keywords[i]["keep_flag"], "More than one AdGroup: " + msg]);
                     }
                 } else {
-                    dump.push([cid, keywords[i]["adgr_name"], keywords[i]["keyword"], keywords[i]["searchterm"], keywords[i]["matchtype"], keywords[i]["cpc"], keywords[i]["keep_flag"], "Unresolved Keyword/AdGroup"]);
+                    var msg = "";
+                    while (keywordCheck.hasNext()) {
+                        var item = keywordCheck.next();
+                        msg += item.getAdGroup().getId() + "#" + item.getId() + ";";
+                    }
+                    dump.push([cid, keywords[i]["adgr_name"], keywords[i]["keyword"], keywords[i]["searchterm"], keywords[i]["matchtype"], keywords[i]["cpc"], keywords[i]["keep_flag"], "Keyword Already Exists: " + msg]);
                 }
             }
             Logger.log("Positive Keywords Inserted: " + count);
@@ -3225,7 +3259,7 @@ function SqrHandler() {
                 MailApp.sendEmail({
                     to: "yorgos@economycarrentals.com",
                     cc: "akaintarisecr@gmail.com",
-                    name: "CarFlexi SQR Script Services",
+                    name: "ECR SQR Script Services",
                     subject: "Positive Keywords not Inserted in " + cid,
                     htmlBody: dumpMessage
                 });
