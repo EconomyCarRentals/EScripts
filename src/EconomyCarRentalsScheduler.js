@@ -1,4 +1,9 @@
 /**
+ * @Version 2.7
+ * @Author Fotis/Argiris
+ * @Date 03/10/2017
+ * @Changelog Implemented saveAccountKpi
+ * 
  * @Version 2.6.3
  * @Author Argiris
  * @Date 29/08/2017
@@ -1189,7 +1194,6 @@ function AccountKpiSetter() {
      * @type String
      */
     var key = null;
-
     /**
      * Sets the key element for this operation. Once set it is immutable.
      * Further attempts throw an exeption.
@@ -1204,7 +1208,6 @@ function AccountKpiSetter() {
             throw "AccountKpiSetter.key can be set only once!";
         }
     };
-
     /**
      * Gets the key element of this operation.
      * 
@@ -1213,7 +1216,6 @@ function AccountKpiSetter() {
     this.getKeyElement = function () {
         return key;
     };
-
     /**
      * Adds or updates the Account label for the specified key. The key is
      * updated with the given value. Throws exeption if the key is not set.
@@ -1256,8 +1258,51 @@ function AccountKpiSetter() {
             newDescription = "[" + newValue + "]";
             AdWordsApp.createLabel("##Account#Attributes##", newDescription);
         }
+        var cid = AdWordsApp.currentAccount().getCustomerId().replace(/\-/g, "");
+        saveAccountKpi(cid, key, value);
     };
 
+    /**
+     * Saves the Account kpi in the database.
+     * 
+     * @param {Number} acc The Account Id.
+     * @param {String} kpi The kpi name.
+     * @param {String} value The kpi value.
+     * @returns {null}
+     */
+    function saveAccountKpi(acc, kpi, value) {
+        BD.TIMESTAMP.stamp('Saving Account KPI ', 'Started');
+        Logger.log('CREATING JDBC CONNECTION');
+        value = value.replace(/p/g, "").replace(/m/g, "").replace(/n/g, "");
+        Logger.log("acc " + acc + " kpi " + kpi + " value " + value);
+        var stmt = null;
+        var query = "{call `black-hole`.select_accounts_kpi_today(" + acc + ")}";
+
+        try {
+            var conn = Jdbc.getConnection(BD.JDBC.URL.BASE + BD.JDBC.URL.SCHEMA.LOG, BD.JDBC.USER, BD.JDBC.PASS);
+            stmt = conn.createStatement();
+            var rs = stmt.executeQuery(query);
+            var x = {};
+            if (rs.next()) {
+                x = JSON.parse(rs.getString("json"));
+                x[kpi] = value;
+            } else {
+                x[kpi] = value;
+            }
+            stmt = conn.prepareStatement('CALL update_accounts_kpi(?, ?)');
+            stmt.setLong(1, acc);
+            stmt.setString(2, JSON.stringify(x));
+            stmt.addBatch();
+            var batch = stmt.executeBatch();
+        } catch (e) {
+            Logger.log('ERROR : CATCH BLOCK : ' + e);
+        } finally {
+            if (stmt != null) {
+                stmt.close();
+            }
+        }
+        BD.TIMESTAMP.stamp('Saving Account KPI', 'Finished');
+    }
 }
 
 /**
