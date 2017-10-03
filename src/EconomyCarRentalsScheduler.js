@@ -96,7 +96,7 @@
 
 function main() {
     BD = {};
-    BD.VERSION = "2.6.3";
+    BD.VERSION = "2.7";
     BD.ACC = {};
     BD.CAMP = {};
     BD.ADGR = {};
